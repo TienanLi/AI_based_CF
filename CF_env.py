@@ -112,48 +112,7 @@ class CFEnv(gym.Env):
     expected_speed = 33.5
     expected_time_gap = 1
 
-    if self.rewardName == 'test':
-      reward = 0
-      # headway
-      if newTimeGap < 0.6:
-        reward -= expected_speed
-      # speed reward
-      reward += (expected_speed - max(0, expected_speed - self.follower.speed))
-      if newSpacing < 0:
-        reward -= 10000
-      return reward
-
-    elif self.rewardName == 'xiaoboqu':
-      reward = 0
-      # headway
-      if newTimeGap < 1:
-        reward -= expected_speed
-      # speed reward
-      reward += (expected_speed - max(0, expected_speed - self.follower.speed))
-      if newSpacing < 0:
-        reward -= 100
-      return reward
-
-    elif self.rewardName == 'cathaywu':
-      expected_speed = 18
-      speed_reward = expected_speed - max(0, expected_speed - self.follower.speed)
-      reward = speed_reward
-      if newSpacing < 0:
-        reward -= 100
-      return reward
-    elif self.rewardName == 'original':
-      # headway
-      reward = 0
-      if newSpacing < 0:
-        reward -= HIT_PENALTY
-      else:
-        reward -= HIT_PENALTY * max(0, 1 - newTimeGap)
-      # speed
-      reward += max(expected_speed, self.follower.speed) * SPEED_REWARD
-      reward += (1 - newTimeGap) * (self.leader.speed - self.follower.speed) * SPEED_DIFF_REWARD
-      return reward
-
-    elif self.rewardName == 'liming':
+    if self.rewardName == 'liming':
       alpha = 1
       beta = 1
       gamma = 1
@@ -265,24 +224,24 @@ class CFEnv(gym.Env):
 
       return reward
 
-    elif self.rewardName == 'standard':
-      alpha = self.SAFETY_WEIGHT
-      beta = self.EFFICIENCY_WEIGHT
-      gamma = self.COMFORT_WEIGHT
-      delta = 4
-      reward = 0
+    elif self.rewardName == 'equilibrium_spacing_embedded':
+      #safety term - TTC
+      r_s = 0
+      if self.follower.speed > self.leader.speed:  # not calculate if follow is slower than leader
+        TTC = newSpacing / (self.follower.speed - self.leader.speed)
+        if TTC <= 1.5:
+          r_s = - 1 / TTC
+      #efficiency term - equilibrium spacing
+      tau = 1
+      d = 5
+      equilibriumSpacing = self.follower.speed * tau + d
+      r_e = - abs(newSpacing - equilibriumSpacing) # penalize if the spacing is deviated from equilibrium spacing
+      #comfort term - acceleration/deceleration rate
+      r_c = - acceleration ** 2
 
-      # time headway
-      if expected_time_gap > newTimeGap > 0:
-        reward -= alpha * (100 - 100 * np.sqrt(max(0, expected_time_gap-(expected_time_gap-newTimeGap)**2)))
+      #weight terms - their values need to be tested to find the feasible domian
+      a_s = 1
+      a_e = 1
+      a_c = 4
 
-      # speed reward
-      reward += beta * min(expected_speed, self.follower.speed)
-
-      #speed diff reward
-      if newTimeGap < expected_time_gap and self.leader.speed > self.follower.speed:
-        reward += gamma * (self.leader.speed - self.follower.speed) * (expected_time_gap - newTimeGap)
-
-      reward -= delta * acceleration ** 2
-
-      return reward
+      return a_s * r_s + a_e * r_e + a_c * r_c
